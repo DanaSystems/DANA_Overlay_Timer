@@ -8,8 +8,9 @@ class DanaOverlay(QWidget):
     def __init__(self):
         super().__init__()
         
-        self.work_time = 10
-        self.pause_time = 10
+        # Настройки по умолчанию (25 минут работа / 5 минут отдых)
+        self.work_time = 1500 
+        self.pause_time = 300  
         self.total_rounds = 10
         
         self.current_round = 1
@@ -33,11 +34,9 @@ class DanaOverlay(QWidget):
         self.layout = QVBoxLayout(self.content_frame)
         self.layout.setSpacing(0)
         
-        # Статус (теперь здесь раунды типа 1/10)
         self.label_status = QLabel("")
         self.label_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        # Таймер
         self.label_time = QLabel("START")
         self.label_time.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -57,23 +56,38 @@ class DanaOverlay(QWidget):
         self.resize(500, 160) 
         self.show()
 
+    def format_time(self, seconds):
+        """Красивое форматирование времени"""
+        if seconds < 60:
+            return str(seconds)
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        s = seconds % 60
+        if h > 0:
+            return f"{h:02}:{m:02}:{s:02}"
+        return f"{m:02}:{s:02}"
+
     def update_styles(self):
         s = self.scale_factor
         status_size = int(16 * s)
         
-        current_text = self.label_time.text()
-        if current_text.isdigit():
-            fs = int(85 * s)
+        display_text = self.label_time.text()
+        
+        # Адаптивный размер шрифта в зависимости от длины текста
+        if ":" in display_text:
+            # Для формата 00:00 или 00:00:00 делаем шрифт чуть меньше
+            fs = int(75 * s) if len(display_text) <= 5 else int(55 * s)
+        elif display_text.isdigit():
+            fs = int(90 * s)
         else:
-            fs = int(55 * s) 
+            fs = int(55 * s) # START / FINISH
             
         time_color = "white"
         if self.is_running:
             time_color = "#27ae60" if self.is_work_phase else "#e67e22"
 
-        self.label_status.setStyleSheet(f"color: {time_color}; font-size: {status_size}px; font-weight: bold; font-family: 'Segoe UI'; opacity: 0.8;")
+        self.label_status.setStyleSheet(f"color: {time_color}; font-size: {status_size}px; font-weight: bold; font-family: 'Segoe UI';")
         self.label_time.setStyleSheet(f"color: {time_color}; font-size: {fs}px; font-weight: 900; font-family: 'Arial Black';")
-        
         self.shadow.setBlurRadius(max(3, int(15 * s)))
 
     def wheelEvent(self, event):
@@ -83,15 +97,32 @@ class DanaOverlay(QWidget):
         else:
             self.scale_factor = max(0.4, self.scale_factor - 0.1)
         
-        new_w = int(500 * self.scale_factor)
-        new_h = int(160 * self.scale_factor)
-        self.setFixedSize(new_w, new_h)
+        self.setFixedSize(int(500 * self.scale_factor), int(160 * self.scale_factor))
         self.update_styles()
+
+    def show_time_dialog(self, title, is_work):
+        """Диалог выбора времени с переключателем единиц"""
+        units = ["Seconds", "Minutes", "Hours"]
+        unit, ok_u = QInputDialog.getItem(self, title, "Select Unit:", units, 1, False)
+        if ok_u:
+            max_val = 3600 if unit == "Seconds" else 1440 # Ограничения для безопасности
+            val, ok_v = QInputDialog.getInt(self, title, f"Enter {unit}:", 1, 1, max_val)
+            if ok_v:
+                seconds = val
+                if unit == "Minutes": seconds = val * 60
+                elif unit == "Hours": seconds = val * 3600
+                
+                if is_work:
+                    self.work_time = seconds
+                else:
+                    self.pause_time = seconds
+                self.stop_timer()
 
     def update_timer(self):
         if self.time_left > 0:
             self.time_left -= 1
-            self.label_time.setText(str(self.time_left))
+            self.label_time.setText(self.format_time(self.time_left))
+            self.update_styles()
         else:
             self.switch_phase()
 
@@ -110,6 +141,8 @@ class DanaOverlay(QWidget):
                 self.stop_timer()
                 self.label_status.setText("COMPLETED")
                 self.label_time.setText("FINISH")
+                return
+        self.label_time.setText(self.format_time(self.time_left))
         self.update_styles()
 
     def start_timer(self):
@@ -118,6 +151,7 @@ class DanaOverlay(QWidget):
         self.is_work_phase = True
         self.time_left = self.work_time
         self.label_status.setText(f"WORK {self.current_round}/{self.total_rounds}")
+        self.label_time.setText(self.format_time(self.time_left))
         self.update_styles()
         self.timer.start(1000)
 
@@ -130,29 +164,32 @@ class DanaOverlay(QWidget):
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
-        menu.setStyleSheet("QMenu { background: #1e1e1e; color: white; border: 1px solid #444; } QMenu::item:selected { background: #0078d4; }")
+        menu.setStyleSheet("""
+            QMenu { background: #1e1e1e; color: white; border: 1px solid #444; padding: 5px; }
+            QMenu::item:selected { background: #0078d4; }
+        """)
+        
         act_start = menu.addAction("▶ Start")
         act_stop = menu.addAction("⏹ Stop")
         menu.addSeparator()
-        act_work = menu.addAction("⏱ Work Time")
-        act_pause = menu.addAction("☕ Pause Time")
-        act_rounds = menu.addAction("🔄 Total Rounds")
+        
+        act_work = menu.addAction("⏱ Set Work Time")
+        act_pause = menu.addAction("☕ Set Pause Time")
+        act_rounds = menu.addAction("🔄 Set Total Rounds")
+        
         menu.addSeparator()
         act_exit = menu.addAction("❌ Exit")
 
         action = menu.exec(self.mapToGlobal(event.pos()))
-        if action == act_start: self.start_timer()
+        
+        if action == act_work: self.show_time_dialog("Work Time", True)
+        elif action == act_pause: self.show_time_dialog("Pause Time", False)
+        elif action == act_rounds:
+            val, ok = QInputDialog.getInt(self, "Rounds", "Total Rounds:", self.total_rounds, 1, 999)
+            if ok: self.total_rounds = val; self.stop_timer()
+        elif action == act_start: self.start_timer()
         elif action == act_stop: self.stop_timer()
         elif action == act_exit: QApplication.quit()
-        elif action == act_work:
-            val, ok = QInputDialog.getInt(self, "Settings", "Work (sec):", self.work_time, 1, 9999)
-            if ok: self.work_time = val; self.stop_timer()
-        elif action == act_pause:
-            val, ok = QInputDialog.getInt(self, "Settings", "Pause (sec):", self.pause_time, 1, 9999)
-            if ok: self.pause_time = val; self.stop_timer()
-        elif action == act_rounds:
-            val, ok = QInputDialog.getInt(self, "Settings", "Total Rounds:", self.total_rounds, 1, 999)
-            if ok: self.total_rounds = val; self.stop_timer()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
