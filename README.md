@@ -31,4 +31,4 @@
 1. Установите зависимости: `pip install PyQt6`
 2. Сборка в один файл:
    ```bash
-   py -m PyInstaller --noconsole --onefile --name="DANA_Overlay" main.py
+   py -m PyInstaller --noconsole --onefile --icon="icon.ico" --name="DANA_Overlay" main.py
