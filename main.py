@@ -1,4 +1,6 @@
 import sys
+import json
+import os
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
                              QMenu, QInputDialog, QGraphicsDropShadowEffect, QFrame)
 from PyQt6.QtCore import Qt, QTimer
@@ -8,18 +10,49 @@ class DanaOverlay(QWidget):
     def __init__(self):
         super().__init__()
         
-        # Настройки по умолчанию (25 минут работа / 5 минут отдых)
+        # Настройки по умолчанию
+        self.config_file = "settings.json"
         self.work_time = 1500 
         self.pause_time = 300  
         self.total_rounds = 10
+        self.scale_factor = 1.0
+        
+        # Загружаем сохраненные настройки, если они есть
+        self.load_settings()
         
         self.current_round = 1
         self.time_left = self.work_time
         self.is_work_phase = True
         self.is_running = False
-        self.scale_factor = 1.0
 
         self.init_ui()
+
+    def load_settings(self):
+        """Загрузка настроек из JSON"""
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r") as f:
+                    data = json.load(f)
+                    self.work_time = data.get("work_time", 1500)
+                    self.pause_time = data.get("pause_time", 300)
+                    self.total_rounds = data.get("total_rounds", 10)
+                    self.scale_factor = data.get("scale_factor", 1.0)
+            except Exception as e:
+                print(f"Error loading settings: {e}")
+
+    def save_settings(self):
+        """Сохранение настроек в JSON"""
+        try:
+            data = {
+                "work_time": self.work_time,
+                "pause_time": self.pause_time,
+                "total_rounds": self.total_rounds,
+                "scale_factor": self.scale_factor
+            }
+            with open(self.config_file, "w") as f:
+                json.dump(data, f, indent=4)
+        except Exception as e:
+            print(f"Error saving settings: {e}")
 
     def init_ui(self):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | 
@@ -53,11 +86,10 @@ class DanaOverlay(QWidget):
         self.timer.timeout.connect(self.update_timer)
 
         self.update_styles()
-        self.resize(500, 160) 
+        self.setFixedSize(int(500 * self.scale_factor), int(160 * self.scale_factor))
         self.show()
 
     def format_time(self, seconds):
-        """Красивое форматирование времени"""
         if seconds < 60:
             return str(seconds)
         h = seconds // 3600
@@ -70,17 +102,14 @@ class DanaOverlay(QWidget):
     def update_styles(self):
         s = self.scale_factor
         status_size = int(16 * s)
-        
         display_text = self.label_time.text()
         
-        # Адаптивный размер шрифта в зависимости от длины текста
         if ":" in display_text:
-            # Для формата 00:00 или 00:00:00 делаем шрифт чуть меньше
             fs = int(75 * s) if len(display_text) <= 5 else int(55 * s)
         elif display_text.isdigit():
             fs = int(90 * s)
         else:
-            fs = int(55 * s) # START / FINISH
+            fs = int(55 * s)
             
         time_color = "white"
         if self.is_running:
@@ -99,24 +128,24 @@ class DanaOverlay(QWidget):
         
         self.setFixedSize(int(500 * self.scale_factor), int(160 * self.scale_factor))
         self.update_styles()
+        self.save_settings() # Сохраняем масштаб
 
     def show_time_dialog(self, title, is_work):
-        """Диалог выбора времени с переключателем единиц"""
         units = ["Seconds", "Minutes", "Hours"]
         unit, ok_u = QInputDialog.getItem(self, title, "Select Unit:", units, 1, False)
         if ok_u:
-            max_val = 3600 if unit == "Seconds" else 1440 # Ограничения для безопасности
+            max_val = 3600 if unit == "Seconds" else 1440
             val, ok_v = QInputDialog.getInt(self, title, f"Enter {unit}:", 1, 1, max_val)
             if ok_v:
                 seconds = val
                 if unit == "Minutes": seconds = val * 60
                 elif unit == "Hours": seconds = val * 3600
                 
-                if is_work:
-                    self.work_time = seconds
-                else:
-                    self.pause_time = seconds
+                if is_work: self.work_time = seconds
+                else: self.pause_time = seconds
+                
                 self.stop_timer()
+                self.save_settings() # Сохраняем новое время
 
     def update_timer(self):
         if self.time_left > 0:
@@ -186,7 +215,10 @@ class DanaOverlay(QWidget):
         elif action == act_pause: self.show_time_dialog("Pause Time", False)
         elif action == act_rounds:
             val, ok = QInputDialog.getInt(self, "Rounds", "Total Rounds:", self.total_rounds, 1, 999)
-            if ok: self.total_rounds = val; self.stop_timer()
+            if ok: 
+                self.total_rounds = val
+                self.stop_timer()
+                self.save_settings() # Сохраняем раунды
         elif action == act_start: self.start_timer()
         elif action == act_stop: self.stop_timer()
         elif action == act_exit: QApplication.quit()
