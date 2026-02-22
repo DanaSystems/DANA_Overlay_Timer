@@ -3,9 +3,11 @@ import json
 import os
 import ctypes
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
-                             QMenu, QInputDialog, QGraphicsDropShadowEffect, QFrame)
+                             QMenu, QInputDialog, QGraphicsDropShadowEffect, QFrame, QMessageBox)
 from PyQt6.QtCore import Qt, QTimer, QPoint
 from PyQt6.QtGui import QColor
+
+VERSION = "1.4.0"
 
 class DanaOverlay(QWidget):
     def __init__(self):
@@ -72,6 +74,7 @@ class DanaOverlay(QWidget):
             print(f"Error saving settings: {e}")
 
     def init_ui(self):
+        self.setWindowTitle("DANA Overlay Timer")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | 
                             Qt.WindowType.WindowStaysOnTopHint | 
                             Qt.WindowType.Tool)
@@ -196,7 +199,10 @@ class DanaOverlay(QWidget):
         act_start, act_stop = menu.addAction("▶ Start"), menu.addAction("⏹ Stop")
         menu.addSeparator()
         act_work, act_pause = menu.addAction("⏱ Set Work Time"), menu.addAction("☕ Set Pause Time")
-        act_rounds, act_exit = menu.addAction("🔄 Set Total Rounds"), menu.addAction("❌ Exit")
+        act_rounds = menu.addAction("🔄 Set Total Rounds")
+        menu.addSeparator()
+        act_about = menu.addAction("ℹ About")
+        act_exit = menu.addAction("❌ Exit")
 
         action = menu.exec(self.mapToGlobal(event.pos()))
         if action == act_work: self.show_time_dialog("Work Time", True)
@@ -206,6 +212,8 @@ class DanaOverlay(QWidget):
             if ok: self.total_rounds = v; self.stop_timer(); self.save_settings()
         elif action == act_start: self.start_timer()
         elif action == act_stop: self.stop_timer()
+        elif action == act_about:
+            QMessageBox.about(self, "About", f"DANA Overlay Timer\nv{VERSION} | Developed by DANA SYSTEMS")
         elif action == act_exit: QApplication.quit()
 
     def mousePressEvent(self, event):
